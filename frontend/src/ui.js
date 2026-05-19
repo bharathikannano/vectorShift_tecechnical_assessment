@@ -1,26 +1,13 @@
-// ui.js
-// Displays the drag-and-drop UI
-// --------------------------------------------------
-
 import { useState, useRef, useCallback } from 'react';
 import ReactFlow, { Controls, Background, MiniMap } from 'reactflow';
 import { useStore } from './store';
 import { shallow } from 'zustand/shallow';
-import { InputNode } from './nodes/inputNode';
-import { LLMNode } from './nodes/llmNode';
-import { OutputNode } from './nodes/outputNode';
-import { TextNode } from './nodes/textNode';
+import { getNodeDefinition, nodeTypes } from './nodes/registry';
 
 import 'reactflow/dist/style.css';
 
 const gridSize = 20;
 const proOptions = { hideAttribution: true };
-const nodeTypes = {
-  customInput: InputNode,
-  llm: LLMNode,
-  customOutput: OutputNode,
-  text: TextNode,
-};
 
 const selector = (state) => ({
   nodes: state.nodes,
@@ -46,8 +33,16 @@ export const PipelineUI = () => {
     } = useStore(selector, shallow);
 
     const getInitNodeData = (nodeID, type) => {
-      let nodeData = { id: nodeID, nodeType: `${type}` };
-      return nodeData;
+      const definition = getNodeDefinition(type);
+      const fieldDefaults = (definition?.fields ?? []).reduce((defaults, field) => {
+        if (field.defaultValue !== undefined) {
+          defaults[field.name] = field.defaultValue;
+        }
+
+        return defaults;
+      }, {});
+
+      return { id: nodeID, nodeType: type, ...fieldDefaults };
     }
 
     const onDrop = useCallback(
@@ -80,7 +75,7 @@ export const PipelineUI = () => {
             addNode(newNode);
           }
         },
-        [reactFlowInstance]
+        [addNode, getNodeID, reactFlowInstance]
     );
 
     const onDragOver = useCallback((event) => {
@@ -90,7 +85,7 @@ export const PipelineUI = () => {
 
     return (
         <>
-        <div ref={reactFlowWrapper} style={{width: '100wv', height: '70vh'}}>
+        <div className="pipeline-canvas" ref={reactFlowWrapper}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

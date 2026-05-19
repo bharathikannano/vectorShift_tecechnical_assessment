@@ -1,16 +1,19 @@
 # VectorShift Frontend Technical Assessment
 
-A node-based pipeline builder built with React Flow and Zustand, with a small
-FastAPI backend stub. The frontend lets users drag pipeline nodes onto a canvas,
-connect them with edges, and edit basic node fields.
+A React Flow pipeline builder with a FastAPI backend. Users can drag nodes onto a
+canvas, edit node fields, connect handles, submit the graph, and receive an alert
+with node count, edge count, and DAG status.
 
-## Tech Stack
+## What Is Included
 
-- React 18
-- React Flow
-- Zustand
-- Create React App
-- FastAPI
+- Reusable node abstraction with shared layout, handles, fields, and styling.
+- Original nodes: Input, LLM, Output, Text.
+- Five additional demo nodes: API, Transform, Condition, Delay, Logger.
+- Unified frontend styling for toolbar, canvas, nodes, controls, and submit flow.
+- Text node auto-resizing based on entered content.
+- Text node variable parsing for valid JavaScript identifiers like `{{ input }}`.
+- Frontend-to-backend submit integration.
+- Backend DAG validation and graph summary response.
 
 ## Project Structure
 
@@ -19,126 +22,230 @@ connect them with edges, and edit basic node fields.
 ├── backend/
 │   └── main.py
 ├── docs/
-│   ├── current_vs_expected_graphical_view.md
-│   └── project_graphical_explanation.md
 ├── frontend/
 │   ├── public/
 │   ├── src/
 │   │   ├── nodes/
+│   │   │   ├── baseNode.js
+│   │   │   ├── genericNode.js
+│   │   │   ├── registry.js
 │   │   │   ├── inputNode.js
 │   │   │   ├── llmNode.js
 │   │   │   ├── outputNode.js
 │   │   │   └── textNode.js
 │   │   ├── App.js
 │   │   ├── draggableNode.js
+│   │   ├── index.css
 │   │   ├── store.js
 │   │   ├── submit.js
 │   │   ├── toolbar.js
 │   │   └── ui.js
+│   ├── package-lock.json
 │   └── package.json
 └── README.md
 ```
-
-## Features
-
-- Drag-and-drop node creation from the toolbar.
-- React Flow canvas with background grid, minimap, and controls.
-- Four node types:
-  - Input
-  - LLM
-  - Output
-  - Text
-- Smooth animated edges with arrow markers.
-- Zustand store for nodes, edges, and graph updates.
-- Minimal FastAPI backend with a health route and placeholder pipeline parser.
 
 ## Prerequisites
 
 - Node.js and npm
 - Python 3.9+
 
-## Frontend Setup
+## Install
 
-From the repository root:
+From the repository root, install frontend dependencies:
 
 ```bash
 cd frontend
-npm install
-npm start
+npm ci
 ```
 
-The frontend runs at:
-
-```text
-http://localhost:3000
-```
-
-## Backend Setup
-
-From the repository root:
+If `npm ci` is not available for your environment, use:
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install fastapi uvicorn python-multipart
+npm install
+```
+
+Set up the backend virtual environment:
+
+```bash
+cd ../backend
+python -m venv venv
+source venv/bin/activate
+pip install fastapi uvicorn
+```
+
+## Run
+
+Start the backend from `backend/`:
+
+```bash
+source venv/bin/activate
 uvicorn main:app --reload --port 8000
 ```
 
-The backend runs at:
+The backend should run at:
 
 ```text
 http://localhost:8000
 ```
 
-Available backend routes:
-
-| Method | Route | Description |
-| --- | --- | --- |
-| GET | `/` | Returns `{ "Ping": "Pong" }` |
-| GET | `/pipelines/parse` | Placeholder parse endpoint returning `{ "status": "parsed" }` |
-
-## Available Frontend Scripts
-
-Run these inside the `frontend` directory:
+In a second terminal, start the frontend from `frontend/`:
 
 ```bash
 npm start
 ```
 
-Starts the development server.
+The frontend should run at:
 
-```bash
-npm test
+```text
+http://localhost:3000
 ```
 
-Starts the test runner.
+If port `3000` is already busy, run the frontend on another allowed port:
+
+```bash
+PORT=3001 npm start
+```
+
+The backend CORS settings already allow `localhost:3000` and `localhost:3001`.
+
+## Validate
+
+### 1. Frontend Build
+
+From `frontend/`:
 
 ```bash
 npm run build
 ```
 
-Creates a production build in `frontend/build`.
+Expected result:
 
-## How The App Works
+```text
+Compiled successfully.
+```
 
-1. The toolbar renders draggable node templates.
-2. Dragging a template stores its node type in the browser drag event.
-3. Dropping on the React Flow canvas creates a new node at the drop position.
-4. Zustand stores the node and edge arrays.
-5. React Flow renders the graph from the store.
-6. Nodes can be connected through their handles.
+### 2. Backend Syntax
 
-## Current Implementation Notes
+From `backend/`:
 
-- The submit button is rendered but does not currently send the graph to the backend.
-- The backend parser is a placeholder and does not yet count nodes, count edges, or validate whether the graph is a DAG.
-- Node field edits are kept in local component state and are not fully persisted into the global Zustand store.
-- The Text node currently uses a fixed-size input and does not yet create dynamic handles from `{{ variable }}` references.
+```bash
+source venv/bin/activate
+python -m py_compile main.py
+```
 
-## Documentation
+Expected result: no output and exit code `0`.
 
-Additional diagrams and implementation notes are available in:
+### 3. Backend Parse Endpoint
 
-- `docs/project_graphical_explanation.md`
-- `docs/current_vs_expected_graphical_view.md`
+Start the backend first, then run this acyclic graph test:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/pipelines/parse \
+  -H 'Content-Type: application/json' \
+  -d '{"nodes":[{"id":"input-1"},{"id":"text-1"},{"id":"output-1"}],"edges":[{"source":"input-1","target":"text-1"},{"source":"text-1","target":"output-1"}]}'
+```
+
+Expected response:
+
+```json
+{"num_nodes":3,"num_edges":2,"is_dag":true}
+```
+
+Run this cyclic graph test:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/pipelines/parse \
+  -H 'Content-Type: application/json' \
+  -d '{"nodes":[{"id":"a"},{"id":"b"}],"edges":[{"source":"a","target":"b"},{"source":"b","target":"a"}]}'
+```
+
+Expected response:
+
+```json
+{"num_nodes":2,"num_edges":2,"is_dag":false}
+```
+
+### 4. Browser Flow
+
+With both backend and frontend running:
+
+1. Open `http://localhost:3000` or `http://localhost:3001`.
+2. Confirm the toolbar shows these nodes:
+   `Input`, `LLM`, `Output`, `Text`, `API`, `Transform`, `Condition`, `Delay`, `Logger`.
+3. Drag a few nodes onto the canvas.
+4. Connect node handles.
+5. Edit a Text node and enter a variable such as `Hello {{ customerName }}`.
+6. Confirm a left-side handle appears for `customerName`.
+7. Click `Submit Pipeline`.
+8. Confirm the alert displays node count, edge count, and DAG status.
+
+## Assessment Mapping
+
+| Requirement | Where It Is Implemented |
+| --- | --- |
+| Node abstraction | `frontend/src/nodes/baseNode.js`, `genericNode.js`, `registry.js` |
+| Five new nodes | `frontend/src/nodes/registry.js` |
+| Styling | `frontend/src/index.css` |
+| Text auto-resize | `frontend/src/nodes/textNode.js` |
+| Text variable handles | `frontend/src/nodes/textNode.js` |
+| Frontend submit request | `frontend/src/submit.js` |
+| Backend count and DAG parsing | `backend/main.py` |
+| Alert with backend response | `frontend/src/submit.js` |
+
+## Troubleshooting
+
+### Submit returns `Method Not Allowed`
+
+This usually means an old backend process is still running on port `8000`.
+Stop it and restart the backend from this project.
+
+Find the process:
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+```
+
+Stop it:
+
+```bash
+kill <PID>
+```
+
+Restart:
+
+```bash
+cd backend
+source venv/bin/activate
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend cannot submit to backend
+
+Make sure:
+
+- Backend is running on `http://localhost:8000`.
+- Frontend is running on `http://localhost:3000` or `http://localhost:3001`.
+- The browser console does not show a CORS or network error.
+
+### Port 3000 is busy
+
+Run:
+
+```bash
+PORT=3001 npm start
+```
+
+### VS Code shows frontend as a separate repo
+
+This project should have one Git repo at the project root only:
+
+```text
+vectorShift_tecechnical_assessment/.git
+```
+
+Reload VS Code after opening the repository root:
+
+```text
+Cmd+Shift+P -> Developer: Reload Window
+```
